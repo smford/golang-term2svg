@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {{.Width}} {{.Height}}" width="{{.Width}}" height="{{.Height}}">
+  <defs>
+    <style>
+      .tui { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: {{.FontSize}}px; font-variant-ligatures: none; fill: {{.Theme.DefaultText}}; }
+      .dim { fill: #94a3b8; }
+      .dark-dim { fill: #64748b; }
+      .cyan { fill: #38bdf8; }
+      .green { fill: #10b981; font-weight: 700; }
+      .amber { fill: #f59e0b; font-weight: 700; }
+      .red { fill: #ef4444; font-weight: 700; }
+      .bold { font-weight: 700; }
+      .italic { font-style: italic; }
+      .underline { text-decoration: underline; }
+      @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+      .cursor { animation: blink 1s infinite; fill: {{.Theme.DefaultText}}; opacity: 0.8; }
+    </style>
+    {{if .Theme.DropShadow}}
+    <filter id="winShadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+    {{end}}
+  </defs>
+
+  {{if .Theme.ShowControls}}
+  <!-- Terminal Window Background -->
+  <rect x="15" y="15" width="{{sub .Width 30}}" height="{{sub .Height 30}}" rx="12" fill="{{.Theme.WindowBg}}" stroke="{{.Theme.WindowBorder}}" stroke-width="1.5" {{if .Theme.DropShadow}}filter="url(#winShadow)"{{end}}/>
+
+  <!-- Window Header Bar -->
+  <path d="M 15 27 Q 15 15 27 15 L {{sub .Width 27}} 15 Q {{sub .Width 15}} 15 {{sub .Width 15}} 27 L {{sub .Width 15}} 50 L 15 50 Z" fill="{{.Theme.HeaderBg}}"/>
+  <line x1="15" y1="50" x2="{{sub .Width 15}}" y2="50" stroke="{{.Theme.HeaderBorder}}" stroke-width="1"/>
+
+  <!-- Window Controls -->
+  <circle cx="38" cy="32" r="6" fill="#ef4444"/>
+  <circle cx="58" cy="32" r="6" fill="#f59e0b"/>
+  <circle cx="78" cy="32" r="6" fill="#10b981"/>
+  <text x="{{div .Width 2}}" y="36" text-anchor="middle" class="tui" fill="{{.Theme.TitleColor}}" font-size="12">{{.Title}}</text>
+  {{else}}
+  <!-- Frameless Background -->
+  <rect x="0" y="0" width="{{.Width}}" height="{{.Height}}" rx="8" fill="{{.Theme.WindowBg}}"/>
+  {{end}}
+
+  {{if .Tabs}}
+  <!-- Top Navigation Tab Bar -->
+  <g transform="translate(35, 68)">
+    {{range .Tabs}}
+    <rect x="{{.X}}" y="0" width="{{.Width}}" height="24" rx="3" fill="{{if .IsActive}}{{$rootTheme := $.Theme}}{{$rootTheme.ActiveTabBg}}{{else}}{{$rootTheme := $.Theme}}{{$rootTheme.InactiveTabBg}}{{end}}"/>
+    <text x="{{add .X (div .Width 2)}}" y="16" text-anchor="middle" class="tui {{if .IsActive}}bold{{else}}dim{{end}}" fill="{{if .IsActive}}{{$.Theme.ActiveTabText}}{{else}}{{$.Theme.InactiveTabText}}{{end}}" font-size="12">{{.Label}}</text>
+    {{end}}
+  </g>
+  {{end}}
+
+  <!-- Inner Viewport Card -->
+  <g transform="translate(35, {{.CardY}})">
+    {{if .Theme.ShowControls}}
+    <rect x="0" y="0" width="{{sub .Width 70}}" height="{{sub .CardHeight 25}}" rx="6" fill="{{.Theme.CardBg}}" stroke="{{.Theme.CardBorder}}" stroke-width="1.5"/>
+    {{end}}
+
+    {{if or .CardHeader .StatusBadge}}
+    <!-- Card Subheader Line -->
+    <g transform="translate(16, 24)">
+      {{if .CardHeader}}
+      <text x="0" y="0" class="tui bold" fill="{{.Theme.DefaultText}}">{{.CardHeader}}</text>
+      {{end}}
+
+      {{if .StatusBadge}}
+      <!-- Status Badge -->
+      <rect x="{{.BadgeX}}" y="-13" width="{{.BadgeWidth}}" height="18" fill="#10b981" rx="2"/>
+      <text x="{{add .BadgeX (div .BadgeWidth 2)}}" y="0" text-anchor="middle" class="tui bold" fill="#ffffff" font-size="11">{{.StatusBadge}}</text>
+      {{end}}
+    </g>
+    <line x1="16" y1="36" x2="{{sub .Width 86}}" y2="36" stroke="{{.Theme.CardBorder}}" stroke-width="1"/>
+    {{end}}
+
+    <!-- Terminal Content Lines -->
+    <g transform="translate(16, {{.ContentY}})">
+{{range .RenderedLines}}      {{. | safeHTML}}
+{{end}}
+      {{if .ShowCursor}}
+      <rect x="{{.CursorPixelX}}" y="{{.CursorPixelY}}" width="8" height="{{.FontSize}}" class="cursor"/>
+      {{end}}
+    </g>
+  </g>
+</svg>
