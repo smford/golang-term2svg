@@ -2,13 +2,16 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*.*.*'
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag to release (e.g. v0.1.0)'
-        required: true
+      version_bump:
+        description: 'Version bump type (auto, patch, minor, major) or explicit version (e.g. v0.1.0)'
+        required: false
+        default: 'auto'
         type: string
 
 concurrency:
@@ -21,8 +24,147 @@ permissions:
   id-token: write
 
 jobs:
+  determine-version:
+    name: Determine Version & Tag
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.version_calc.outputs.should_release }}
+      tag: ${{ steps.version_calc.outputs.tag }}
+      version: ${{ steps.version_calc.outputs.version }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Calculate Next Version & Tag
+        id: version_calc
+        run: |
+          # 1. Skip if release commit
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -q -E "\[skip ci\]|chore\(release\):"; then
+            echo "Release commit detected. Skipping automated release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 2. If triggered by an explicit tag push
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+            echo "Release triggered by tag push: $TAG"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 3. If triggered by push to main or workflow_dispatch
+          git fetch --tags --prune --unshallow 2>/dev/null || git fetch --tags --prune
+
+          # Find highest SemVer tag
+          LATEST_TAG=$(git tag -l 'v*' | sort -V | tail -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No existing release tags found. Bootstrapping initial release v0.1.0."
+            LATEST_TAG=""
+          fi
+          echo "Latest existing tag: $LATEST_TAG"
+
+          if [ -n "$LATEST_TAG" ]; then
+            CURRENT_TAG=$(git tag --points-at HEAD 'v*' | head -n 1)
+            if [ -n "$CURRENT_TAG" ]; then
+              echo "HEAD is already tagged ($CURRENT_TAG). No new release needed."
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            COMMITS=$(git log "${LATEST_TAG}..HEAD" --oneline)
+            if [ -z "$COMMITS" ]; then
+              echo "No commits since ${LATEST_TAG}. No new release needed."
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            VERSION_NO_V="${LATEST_TAG#v}"
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NO_V"
+            MAJOR=${MAJOR:-0}
+            MINOR=${MINOR:-1}
+            PATCH=${PATCH:-0}
+
+            BUMP="patch"
+            if echo "$COMMITS" | grep -Eq "BREAKING CHANGE|!:"; then
+              BUMP="major"
+            elif echo "$COMMITS" | grep -Eq "^[a-f0-9]+ feat(\(.*\))?:"; then
+              BUMP="minor"
+            fi
+          else
+            MAJOR=0
+            MINOR=1
+            PATCH=0
+            BUMP="initial"
+          fi
+
+          # Check manual override
+          INPUT_BUMP="${{ github.event.inputs.version_bump }}"
+          if [ "$INPUT_BUMP" = "major" ]; then
+            BUMP="major"
+          elif [ "$INPUT_BUMP" = "minor" ]; then
+            BUMP="minor"
+          elif [ "$INPUT_BUMP" = "patch" ]; then
+            BUMP="patch"
+          elif [[ "$INPUT_BUMP" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            SPECIFIED="${INPUT_BUMP#v}"
+            NEW_TAG="v${SPECIFIED}"
+            BUMP="manual"
+          fi
+
+          if [ "$BUMP" = "initial" ]; then
+            NEW_TAG="v0.1.0"
+          elif [ "$BUMP" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          elif [ "$BUMP" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          elif [ "$BUMP" = "patch" ]; then
+            PATCH=$((PATCH + 1))
+            NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          NEW_VERSION="${NEW_TAG#v}"
+          echo "Determined release: ${NEW_TAG} (bump: ${BUMP})"
+
+          # Update version.go
+          python3 -c "
+          import re
+          with open('version.go', 'r') as f:
+              content = f.read()
+          new_content = re.sub(r'var Version = \".*\"', f'var Version = \"${NEW_VERSION}\"', content)
+          with open('version.go', 'w') as f:
+              f.write(new_content)
+          "
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add version.go
+          git commit -m "chore(release): bump version to ${NEW_TAG} [skip ci]" || true
+          git push origin HEAD:main 2>/dev/null || echo "Direct push to main branch not permitted; tag will be managed via API."
+          git tag -a "${NEW_TAG}" -m "Release ${NEW_TAG}"
+          git push origin "${NEW_TAG}" 2>/dev/null || echo "Tag push completed or managed via API."
+
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
   verify:
     name: Verify & Test
+    needs: determine-version
+    if: needs.determine-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -44,8 +186,9 @@ jobs:
         run: go test -v -count=1 -race ./...
 
   goreleaser:
-    name: GoReleaser Release
-    needs: verify
+    name: Build Binaries & Publish Release
+    needs: [determine-version, verify]
+    if: needs.determine-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -78,6 +221,7 @@ jobs:
       - name: Upload Homebrew Formula to Release Assets
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
+          tag_name: ${{ needs.determine-version.outputs.tag }}
           files: Formula/term2svg.rb
 
       - name: Update Homebrew Tap Repository
@@ -85,7 +229,7 @@ jobs:
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || 'smford/homebrew-tap' }}
-          TAG_NAME: ${{ github.ref_name || inputs.tag }}
+          TAG_NAME: ${{ needs.determine-version.outputs.tag }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -99,13 +243,13 @@ jobs:
 
       - name: Index in Go Module Proxy
         run: |
-          TAG="${{ github.ref_name || inputs.tag }}"
+          TAG="${{ needs.determine-version.outputs.tag }}"
           echo "Warming Go Module Proxy (proxy.golang.org) for ${TAG}..."
           GOPROXY=https://proxy.golang.org go list -m "github.com/smford/golang-term2svg@${TAG}" || true
 
       - name: Trigger Documentation Deployment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.ref_name || inputs.tag }}
+          TAG_NAME: ${{ needs.determine-version.outputs.tag }}
         run: |
           gh workflow run pages.yml -f version="${TAG_NAME}" || echo "Pages workflow dispatch completed or skipped"
