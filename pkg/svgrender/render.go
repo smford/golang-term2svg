@@ -8,9 +8,9 @@ import (
 	"io"
 	"strings"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/smford/golang-term2svg/pkg/svgrender/templates"
 	"github.com/smford/golang-term2svg/pkg/termscreen"
-	"github.com/mattn/go-runewidth"
 )
 
 // TabItem represents a top navigation tab.
@@ -23,34 +23,34 @@ type TabItem struct {
 
 // Config configures SVG rendering options.
 type Config struct {
-	Title        string
-	FontSize     int     // Default: 13
-	LineHeight   int     // Default: 21
-	CharWidth    float64 // Default: 8.0
-	PaddingX     int     // Default: 100
-	PaddingY     int     // Default: 140
-	ThemeName    string  // "dark", "light", "catppuccin", "nord", "frameless"
-	AutoCrop     bool    // Shrink canvas to visible content
-	ShowCursor   bool    // Render blinking terminal cursor
-	Tabs         []string
-	ActiveTab    int
-	CardHeader   string // E.g. "System Event Log (Ring Buffer - Last 250 Records)"
-	StatusBadge  string // E.g. "FOLLOW: AUTO-SCROLL (ON)"
-	CustomTmpl   string // Optional raw SVG Go template
+	Title       string
+	FontSize    int     // Default: 13
+	LineHeight  int     // Default: 21
+	CharWidth   float64 // Default: 8.0
+	PaddingX    int     // Default: 100
+	PaddingY    int     // Default: 140
+	ThemeName   string  // "dark", "light", "catppuccin", "nord", "frameless"
+	AutoCrop    bool    // Shrink canvas to visible content
+	ShowCursor  bool    // Render blinking terminal cursor
+	Tabs        []string
+	ActiveTab   int
+	CardHeader  string // E.g. "System Event Log (Ring Buffer - Last 250 Records)"
+	StatusBadge string // E.g. "FOLLOW: AUTO-SCROLL (ON)"
+	CustomTmpl  string // Optional raw SVG Go template
 }
 
 // DefaultConfig returns production-ready defaults matching tui-logs.svg.
 func DefaultConfig() Config {
 	return Config{
-		Title:       "Terminal",
-		FontSize:    13,
-		LineHeight:  21,
-		CharWidth:   8.0,
-		PaddingX:    100,
-		PaddingY:    140,
-		ThemeName:   "dark",
-		AutoCrop:    false,
-		ShowCursor:  false,
+		Title:      "Terminal",
+		FontSize:   13,
+		LineHeight: 21,
+		CharWidth:  8.0,
+		PaddingX:   100,
+		PaddingY:   140,
+		ThemeName:  "dark",
+		AutoCrop:   false,
+		ShowCursor: false,
 	}
 }
 

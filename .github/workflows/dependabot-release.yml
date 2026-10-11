@@ -1,0 +1,99 @@
+name: Dependabot Autonomous Release
+
+on:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: dependabot-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  check-and-release:
+    name: Check Dependabot & Release
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]' || contains(github.event.head_commit.author.name, 'dependabot')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Calculate Next SemVer Patch Tag
+        id: calc_tag
+        run: |
+          git fetch --tags --prune
+          LATEST_TAG=$(git tag -l 'v*' | sort -V | tail -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v0.1.0"
+          fi
+          echo "Latest tag: $LATEST_TAG"
+
+          VERSION_NO_V="${LATEST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NO_V"
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-1}
+          PATCH=${PATCH:-0}
+          NEW_PATCH=$((PATCH + 1))
+          NEW_TAG="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          echo "New tag: $NEW_TAG"
+
+          # Update version.go
+          python3 -c "
+          import re
+          with open('version.go', 'r') as f:
+              content = f.read()
+          new_content = re.sub(r'var Version = \".*\"', f'var Version = \"${NEW_VERSION}\"', content)
+          with open('version.go', 'w') as f:
+              f.write(new_content)
+          "
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.go
+          git commit -m "chore(release): bump version to ${NEW_TAG} [skip ci]" || true
+          git push origin HEAD:main 2>/dev/null || echo "Branch push handled or protected"
+          git tag -a "${NEW_TAG}" -m "Release ${NEW_TAG}"
+          git push origin "${NEW_TAG}"
+
+          echo "tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@053f9b74638557590800a301da1ba82351507e2c # v3.8.1
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Homebrew Formula
+        run: |
+          ./scripts/generate_formula.sh dist Formula
+
+      - name: Upload Homebrew Formula to Release Assets
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          tag_name: ${{ steps.calc_tag.outputs.tag }}
+          files: Formula/term2svg.rb
+
+      - name: Index in Go Module Proxy
+        run: |
+          TAG="${{ steps.calc_tag.outputs.tag }}"
+          GOPROXY=https://proxy.golang.org go list -m "github.com/smford/golang-term2svg@${TAG}" || true

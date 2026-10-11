@@ -3,14 +3,14 @@
 package term2svg
 
 import (
-	"strings"
 	"context"
 	"io"
 	"os"
+	"strings"
 
+	"github.com/smford/golang-term2svg/pkg/redact"
 	"github.com/smford/golang-term2svg/pkg/svgrender"
 	"github.com/smford/golang-term2svg/pkg/termscreen"
-	"github.com/smford/golang-term2svg/pkg/redact"
 )
 
 const (

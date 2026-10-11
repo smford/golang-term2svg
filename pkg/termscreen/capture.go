@@ -1,10 +1,10 @@
 package termscreen
 
 import (
-	"github.com/smford/golang-term2svg/pkg/colorize"
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/smford/golang-term2svg/pkg/colorize"
 	"io"
 	"os"
 	"os/exec"

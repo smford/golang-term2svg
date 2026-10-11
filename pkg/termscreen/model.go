@@ -2,11 +2,11 @@ package termscreen
 
 // Color represents an ANSI color or RGB color.
 type Color struct {
-	IsSet     bool
-	Is256     bool
-	IsRGB     bool
-	Index     uint8
-	R, G, B   uint8
+	IsSet   bool
+	Is256   bool
+	IsRGB   bool
+	Index   uint8
+	R, G, B uint8
 }
 
 // Hex returns a CSS hex color code or empty string if not set.
@@ -101,11 +101,11 @@ type Line []Cell
 
 // Screen is a 2D grid representation of the terminal screen.
 type Screen struct {
-	Cols   int
-	Rows   int
+	Cols    int
+	Rows    int
 	CursorX int
 	CursorY int
-	Lines  []Line
+	Lines   []Line
 }
 
 // NewScreen creates a blank screen with given cols and rows.

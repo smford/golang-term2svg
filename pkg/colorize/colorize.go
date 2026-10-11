@@ -8,13 +8,13 @@ import (
 // ANSI color sequences matching tui-logs.svg aesthetic
 const (
 	ansiReset      = "\x1b[0m"
-	ansiDim        = "\x1b[2;37m"       // dark dim timestamp #64748b
-	ansiBoldGreen  = "\x1b[1;32m"       // [INFO], [OK], 200, Running, healthy #10b981
-	ansiBoldYellow = "\x1b[1;33m"       // [WARN], Degraded, Pending #f59e0b
-	ansiBoldRed    = "\x1b[1;31m"       // [ERROR], [FATAL], Fail, CrashLoopBackOff #ef4444
-	ansiBoldBlue   = "\x1b[1;34m"       // Prompts, commands
-	ansiCyan       = "\x1b[36m"         // key= in key=value pairs #38bdf8
-	ansiBoldPurple = "\x1b[1;35m"       // Headers, decorative frames
+	ansiDim        = "\x1b[2;37m" // dark dim timestamp #64748b
+	ansiBoldGreen  = "\x1b[1;32m" // [INFO], [OK], 200, Running, healthy #10b981
+	ansiBoldYellow = "\x1b[1;33m" // [WARN], Degraded, Pending #f59e0b
+	ansiBoldRed    = "\x1b[1;31m" // [ERROR], [FATAL], Fail, CrashLoopBackOff #ef4444
+	ansiBoldBlue   = "\x1b[1;34m" // Prompts, commands
+	ansiCyan       = "\x1b[36m"   // key= in key=value pairs #38bdf8
+	ansiBoldPurple = "\x1b[1;35m" // Headers, decorative frames
 )
 
 type patternRule struct {

@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.1.0)'
+        required: true
+        type: string
+
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  verify:
+    name: Verify & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Verify Dependencies Integrity
+        run: |
+          go mod verify
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run Tests with Race Detector
+        run: go test -v -count=1 -race ./...
+
+  goreleaser:
+    name: GoReleaser Release
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@053f9b74638557590800a301da1ba82351507e2c # v3.8.1
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Homebrew Formula
+        run: |
+          ./scripts/generate_formula.sh dist Formula
+
+      - name: Upload Homebrew Formula to Release Assets
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          files: Formula/term2svg.rb
+
+      - name: Update Homebrew Tap Repository
+        if: env.HOMEBREW_TAP_TOKEN != ''
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || 'smford/homebrew-tap' }}
+          TAG_NAME: ${{ github.ref_name || inputs.tag }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" tap-repo
+          mkdir -p tap-repo/Formula
+          cp Formula/term2svg.rb tap-repo/Formula/term2svg.rb
+          cd tap-repo
+          git add Formula/term2svg.rb
+          git commit -m "feat(term2svg): update formula for ${TAG_NAME}" || exit 0
+          git push origin main
+
+      - name: Index in Go Module Proxy
+        run: |
+          TAG="${{ github.ref_name || inputs.tag }}"
+          echo "Warming Go Module Proxy (proxy.golang.org) for ${TAG}..."
+          GOPROXY=https://proxy.golang.org go list -m "github.com/smford/golang-term2svg@${TAG}" || true
+
+      - name: Trigger Documentation Deployment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name || inputs.tag }}
+        run: |
+          gh workflow run pages.yml -f version="${TAG_NAME}" || echo "Pages workflow dispatch completed or skipped"

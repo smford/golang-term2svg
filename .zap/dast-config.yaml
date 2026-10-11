@@ -1,0 +1,4 @@
+# DAST test configuration
+server:
+  port: 8080
+  health_endpoint: /healthz
