@@ -17,11 +17,6 @@ const (
 	ansiBoldPurple = "\x1b[1;35m" // Headers, decorative frames
 )
 
-type patternRule struct {
-	re    *regexp.Regexp
-	color string
-}
-
 var (
 	// Timestamps: 14:03:00.012 or 2026-10-10 22:30:00 or 2026-10-10T22:30:00Z
 	reTimestamp = regexp.MustCompile(`\b\d{2}:\d{2}:\d{2}(?:\.\d{3,6})?\b|\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{3,6})?(?:Z|[+-]\d{2}:\d{2})?\b`)
